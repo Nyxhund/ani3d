@@ -7,13 +7,13 @@ _Beware: Do not download the code via the github "Download ZIP" GUI (cgp submodu
 ### Via Clone
 
 ```
-git clone --recurse-submodules https://github.com/nyxhund/ani3d.git
+git clone --recurse-submodules git@github.com:Nyxhund/ani3d.git
 ```
 
 or 
 
 ```
-git clone https://github.com/nyxhund/ani3d.git
+git clone git@github.com:Nyxhund/ani3d.git
 cd ani3d/
 git submodule init
 git submodule update

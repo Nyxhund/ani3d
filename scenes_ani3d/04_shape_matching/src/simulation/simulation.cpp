@@ -44,6 +44,18 @@ void simulation_step(std::vector<shape_deformable_structure>& deformables, simul
         }
     }
 
+    for (auto& elt : deformables)
+    {
+        for (int i = 0; i < elt.position_predict.size(); i++)
+        {
+            if (norm((elt.position_reference[i] - elt.com_reference) - (elt.position_predict[i] - elt.com)) >= param.plasticity)
+            {
+                elt.position_reference[i] = elt.position_predict[i];
+                elt.com_reference = elt.com;
+            }
+        }
+    }
+
     // II. Constraints using PPD
     //     - Collision with the walls (particles/walls)
     //     - Collision between particles (particles/particles)
@@ -110,6 +122,24 @@ void shape_matching(std::vector<shape_deformable_structure>& deformables, simula
     //  - The product a * b^tr, where (a,b) are vec3 is also called a tensor product. It can be computed using the syntax "mat3 M = tensor_product(a,b)"
     //
 
+    for (auto& elm : deformables)
+    {
+        elm.com = average(elm.position_predict);
+
+        auto M = mat3::build_zero();
+
+        for (int i = 0; i < elm.position_predict.size(); i++)
+        {
+            auto r = elm.position_predict[i] - elm.com;
+            auto r_ref = elm.position_reference[i] - elm.com_reference;
+            M += tensor_product(r, r_ref);
+        }
+
+        mat3 R = polar_decomposition(M);
+
+        for (int i = 0; i < elm.position_predict.size(); i++)
+            elm.position_predict[i] = R * (elm.position_reference[i] - elm.com_reference) + elm.com;
+    }
 }
 
 
@@ -142,6 +172,34 @@ void collision_between_particles(std::vector<shape_deformable_structure>& deform
     //    - For all the vertices(/particles) of the shapes (p_i,p_j)
     //      - If ||p_i-p_j|| < 2 r // collision state
     //           Then modify (p_i,p_j) to remove the collision state
+
+    for (int i = 0; i < deformables.size(); i++)
+    {
+        for (int j = 0; j < deformables.size(); j++)
+        {
+            if (i == j)
+                continue;
+
+            for (int p_i = 0; p_i < deformables[i].position_predict.size(); p_i++)
+            {
+                for (int p_j = 0; p_j < deformables[j].position_predict.size(); p_j++)
+                {
+                    vec3 vi = deformables[i].position_predict[p_i];
+                    vec3 vj = deformables[j].position_predict[p_j];
+                    if (norm(vi - vj) < 2 * r + 0.01)
+                    {
+                        vec3 direction = deformables[i].position_predict[p_i] - deformables[j].position_predict[p_j];
+                        vec3 u = normalize(direction);
+                        float d = 2 * r * norm(direction);
+
+                        deformables[i].position_predict[p_i] += d / 2 * u;
+                        deformables[j].position_predict[p_j] -= d / 2 * u;
+
+                    }
+                }
+            }
+        }
+    }
 
 }
 

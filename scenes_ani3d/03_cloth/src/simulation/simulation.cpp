@@ -4,6 +4,12 @@ using namespace cgp;
 
 
 
+static vec3 calculate_spring_force(float const K, float const L0, vec3 pi, vec3 pj)
+{
+    vec3 direction = pi - pj;
+    float const dir_norm = norm(direction);
+    return - K * (dir_norm - L0) * (direction / dir_norm);
+}
 
 // Fill value of force applied on each particle
 // - Gravity
@@ -45,12 +51,56 @@ void simulation_compute_force(cloth_structure& cloth, simulation_parameters cons
         for (int kv = 0; kv < N; ++kv)
             force(ku, kv) += -mu * m * velocity(ku, kv);
 
+    for (int ku = 0; ku < N; ++ku)
+        for (int kv = 0; kv < N; ++kv)
+            force(ku, kv) += parameters.wind.magnitude * L0 * L0 * dot(parameters.wind.direction, normal(ku, kv)) * normal(ku, kv);
 
     // TO DO: Add spring forces ...
     for (int ku = 0; ku < N; ++ku) {
         for (int kv = 0; kv < N; ++kv) {
             // ...
             // force(ku,kv) = ... fill here the force exerted by all the springs attached to the vertex at coordinates (ku,kv).
+
+            // Structural
+            if (ku != N - 1)
+                force(ku, kv) += calculate_spring_force(K, L0, position(ku, kv), position(ku + 1, kv));
+
+            if (ku != 0)
+                force(ku, kv) += calculate_spring_force(K, L0, position(ku, kv), position(ku - 1, kv));
+
+            if (kv != N - 1)
+                force(ku, kv) += calculate_spring_force(K, L0, position(ku, kv), position(ku, kv + 1));
+
+            if (kv != 0)
+                force(ku, kv) += calculate_spring_force(K, L0, position(ku, kv), position(ku, kv - 1));
+
+            float const squareRoot = std::sqrt(2);
+            // Shearing
+            if (ku != N - 1 && kv != N - 1)
+                force(ku, kv) += calculate_spring_force(K, squareRoot * L0, position(ku, kv), position(ku + 1, kv + 1));
+
+            if (ku != N - 1 && kv != 0)
+                force(ku, kv) += calculate_spring_force(K, squareRoot * L0, position(ku, kv), position(ku + 1, kv - 1));
+
+            if (ku != 0 && kv != N - 1)
+                force(ku, kv) += calculate_spring_force(K, squareRoot * L0, position(ku, kv), position(ku - 1, kv + 1));
+
+            if (ku != 0 && kv != 0)
+                force(ku, kv) += calculate_spring_force(K, squareRoot * L0, position(ku, kv), position(ku - 1, kv - 1));
+
+            // Bending
+            if (ku < N - 2)
+                force(ku, kv) += calculate_spring_force(K, 2 * L0, position(ku, kv), position(ku + 2, kv));
+
+            if (ku > 1)
+                force(ku, kv) += calculate_spring_force(K, 2 * L0, position(ku, kv), position(ku - 2, kv));
+
+            if (kv < N - 2)
+                force(ku, kv) += calculate_spring_force(K, 2 * L0, position(ku, kv), position(ku, kv + 2));
+
+            if (kv > 1)
+                force(ku, kv) += calculate_spring_force(K, 2 * L0, position(ku, kv), position(ku, kv - 2));
+
             // 
             // Notes:
             //   - The vertex positions can be accessed as position(ku,kv)
@@ -80,7 +130,6 @@ void simulation_numerical_integration(cloth_structure& cloth, simulation_paramet
             p = p + dt * v;
         }
     }
-    
 }
 
 void simulation_apply_constraints(cloth_structure& cloth, constraint_structure const& constraint)
@@ -95,6 +144,22 @@ void simulation_apply_constraints(cloth_structure& cloth, constraint_structure c
     // For all vertex:
     //   If vertex is below floor level ...
     //   If vertex is inside collision sphere ...
+    int const N = cloth.N_samples();
+    for (int ku = 0; ku < N; ++ku) {
+        for (int kv = 0; kv < N; ++kv) {
+            if (cloth.position(ku, kv).z < constraint.ground_z + 0.01)
+                cloth.position(ku, kv).z = constraint.ground_z + 0.01;
+
+            if (norm(cloth.position(ku, kv) - constraint.sphere.center)
+                    <= constraint.sphere.radius + 0.01)
+            {
+                vec3 direction = cloth.position(ku, kv) - constraint.sphere.center;
+                direction = normalize(direction);
+                cloth.position(ku, kv) = constraint.sphere.center + direction * (constraint.sphere.radius + 0.01);
+            }
+
+        }
+    }
 }
 
 
